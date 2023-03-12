@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.location.*
 import android.net.Uri
 import android.os.Build
@@ -12,6 +13,8 @@ import android.os.Bundle
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
@@ -20,6 +23,7 @@ import com.example.weatherapp2.WeatherInterface.WeatherService
 import com.example.weatherapp2.databinding.ActivityMainBinding
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.gson.Gson
 import com.karumi.dexter.Dexter
 import com.karumi.dexter.MultiplePermissionsReport
 import com.karumi.dexter.PermissionToken
@@ -35,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mFusedLocationClient: FusedLocationProviderClient
 
     private var binding: ActivityMainBinding? = null
+    private lateinit var mSharedPreferences : SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +47,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding?.root)
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        mSharedPreferences=getSharedPreferences(Constance.PREFERENCE_NAME,Context.MODE_PRIVATE)
+        setupUI()
 
 
         if (!isLocationEnabled()) {
@@ -116,7 +124,13 @@ class MainActivity : AppCompatActivity() {
                     if (response.isSuccessful) {
                         val weatherList: WeatherResponse? = response.body()
                         if (weatherList != null) {
-                            setupUI(weatherList)
+
+                            val weatherResponseJsonString= Gson().toJson(weatherList)
+
+                            val editor=mSharedPreferences.edit()
+                            editor.putString(Constance.WEATHER_RESPONSE_DATA,weatherResponseJsonString)
+                            editor.apply()
+
                         }
                         Log.d("weather", weatherList?.weather.toString())
                     } else {
@@ -175,15 +189,55 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun setupUI(weatherList: WeatherResponse) {
-        for (i in weatherList.weather.indices) {
-            Log.i("indicate", i.toString())
-            binding?.tvMain?.text = weatherList.weather[i].main
-            binding?.tvMainDescription?.text = weatherList.weather[i].description
-            binding?.tvTemp?.text=weatherList.main.temp.toString() + getUnit(application.resources.configuration.locales.toString())
-            binding?.tvSunriseTime?.text=unixTime(weatherList.sys.sunrise.toLong())
-            binding?.tvSunsetTime?.text=unixTime(weatherList.sys.sunset.toLong())
+    private fun setupUI() {
+
+        val weatherResponseJsonSrting=mSharedPreferences.getString(Constance.WEATHER_RESPONSE_DATA, "")
+//        Log.d("weatherdata",weatherResponseJsonSrting.toString())
+        if(!weatherResponseJsonSrting.isNullOrEmpty()){
+            val weatherList= Gson().fromJson(weatherResponseJsonSrting,WeatherResponse::class.java)
+//            Log.d("weatherdata",weatherList.toString())
+
+            for (i in weatherList.weather.indices) {
+                Log.i("indicate", i.toString())
+                binding?.tvMain?.text = weatherList.weather[i].main
+                binding?.tvMainDescription?.text = weatherList.weather[i].description
+                binding?.tvTemp?.text=weatherList.main.temp.toString() + getUnit(application.resources.configuration.locales.toString())
+
+                binding?.tvHumidity?.text=weatherList.main.humidity.toString()+ " Per cent"
+                binding?.tvMin?.text=weatherList.main.temp_min.toString() + " min"
+                binding?.tvMax?.text=weatherList.main.temp_max.toString()+ " max"
+                binding?.tvSpeed?.text=weatherList.wind.speed.toString()
+                binding?.tvName?.text=weatherList.name
+                binding?.tvCountry?.text=weatherList.sys.country
+
+                binding?.tvSunriseTime?.text=unixTime(weatherList.sys.sunrise.toLong())
+                binding?.tvSunsetTime?.text=unixTime(weatherList.sys.sunset.toLong())
+
+
+                when(weatherList.weather[i].icon){
+                    "01d" -> binding?.ivMain?.setImageResource(R.drawable.sunny)
+                    "02d" -> binding?.ivMain?.setImageResource(R.drawable.cloud)
+                    "03d" -> binding?.ivMain?.setImageResource(R.drawable.cloud)
+                    "04d" -> binding?.ivMain?.setImageResource(R.drawable.cloud)
+                    "04n" -> binding?.ivMain?.setImageResource(R.drawable.cloud)
+                    "10d" -> binding?.ivMain?.setImageResource(R.drawable.rain)
+                    "11d" -> binding?.ivMain?.setImageResource(R.drawable.storm)
+                    "13d" -> binding?.ivMain?.setImageResource(R.drawable.snowflake)
+                    "01n" -> binding?.ivMain?.setImageResource(R.drawable.cloud)
+                    "02n" -> binding?.ivMain?.setImageResource(R.drawable.cloud)
+                    "03n" -> binding?.ivMain?.setImageResource(R.drawable.cloud)
+                    "10n" -> binding?.ivMain?.setImageResource(R.drawable.cloud)
+                    "11n" -> binding?.ivMain?.setImageResource(R.drawable.rain)
+                    "13n" -> binding?.ivMain?.setImageResource(R.drawable.snowflake)
+                    "50d" -> binding?.ivMain?.setImageResource(R.drawable.haze
+                    )
+
+                }
+            }
+
         }
+
+
 
     }
 
@@ -222,7 +276,23 @@ class MainActivity : AppCompatActivity() {
                                            _ ->
                 dialog.dismiss()
             }.show()
+    }
 
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+
+        menuInflater.inflate(R.menu.menu_main,menu)
+        return super.onCreateOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+
+        return when(item.itemId){
+            R.id.actionRefresh ->{
+                Toast.makeText(this,"Refreshing",Toast.LENGTH_LONG).show()
+                requestLocationData()
+                true
+            }else -> super.onOptionsItemSelected(item)
+        }
 
     }
 
